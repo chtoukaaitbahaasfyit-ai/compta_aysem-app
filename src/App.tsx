@@ -56,6 +56,7 @@ import { GoogleSheetsIntegration } from './components/GoogleSheetsIntegration';
 import { AssociationSettings } from './components/AssociationSettings';
 import { DisbursementManager } from './components/DisbursementManager';
 import { UserLoginModal } from './components/UserLoginModal';
+import { UserManagement } from './components/UserManagement';
 
 export default function App() {
   // Navigation & UI states
@@ -337,6 +338,7 @@ export default function App() {
           projectsCount={projects.length}
           subventionsCount={subventions.length}
           disbursementsCount={pendingDisbursementsCount}
+          isPresident={currentUser.role === 'president'}
           accountingModel={profile.accountingModel}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -569,6 +571,8 @@ export default function App() {
           {activeTab === 'sheets-integration' && (
             <GoogleSheetsIntegration />
           )}
+
+          {activeTab === 'user-management' && currentUser.role === 'president' && <UserManagement />}
 
           {activeTab === 'settings' && (
             <AssociationSettings
