@@ -196,6 +196,16 @@ export const CloudDataService = {
     });
   },
 
+  async executeDisbursementOrder(id: string, executionReference: string): Promise<void> {
+    await api('/rest/v1/rpc/aysm_execute_disbursement', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_order_id: id,
+        p_execution_reference: executionReference || null
+      })
+    });
+  },
+
   async addAuditEvent(action: string, details: string): Promise<void> {
     const session = requireOnlineSession();
 
