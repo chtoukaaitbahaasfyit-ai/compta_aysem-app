@@ -1,7 +1,4 @@
 -- Isolated disbursement workflow foundation. Existing app_records and accounting data remain untouched.
-alter type public.aysm_role add value if not exists 'tresorier';
-alter type public.aysm_role add value if not exists 'responsable_administratif';
-
 create table if not exists public.disbursement_orders (
   id uuid primary key default gen_random_uuid(),
   payload jsonb not null,
@@ -81,3 +78,39 @@ begin
 end; $$;
 revoke all on function public.aysm_treasurer_decide_disbursement(uuid,text,text) from public, anon;
 grant execute on function public.aysm_treasurer_decide_disbursement(uuid,text,text) to authenticated;
+
+
+-- Enforce workflow transitions even if a client calls PostgREST directly.
+create or replace function public.aysm_guard_disbursement_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_role text := private.aysm_my_role()::text;
+begin
+  if v_role = 'responsable_administratif' then
+    if old.created_by <> auth.uid()
+      or old.status not in ('brouillon','a_completer')
+      or new.created_by <> old.created_by
+      or new.created_by_role <> old.created_by_role
+      or new.treasurer_id is distinct from old.treasurer_id
+      or new.president_id is distinct from old.president_id
+      or new.status <> 'en_attente_tresorier' then
+      raise exception 'المسؤول الإداري يمكنه فقط إحالة طلبه للمراجعة أو استكماله';
+    end if;
+  elsif v_role = 'tresorier' then
+    raise exception 'قرارات أمين المال تمر حصرياً عبر إجراء المراجعة المعتمد';
+  elsif v_role <> 'president' then
+    raise exception 'غير مخول لتعديل طلب الصرف';
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists aysm_guard_disbursement_update on public.disbursement_orders;
+create trigger aysm_guard_disbursement_update
+before update on public.disbursement_orders
+for each row execute function public.aysm_guard_disbursement_update();
+
+-- No client-side direct status changes by treasurer; decisions remain RPC-only.
