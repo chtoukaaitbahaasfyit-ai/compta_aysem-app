@@ -253,7 +253,8 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
   };
 
   // Handlers: Treasurer Review
-  const handleTreasurerSubmit = async (e: React.FormEvent) => {\n    if (currentUser.role !== 'tresorier') { alert('هذه الصلاحية مخصصة لأمين المال فقط.'); return; }
+  const handleTreasurerSubmit = async (e: React.FormEvent) => {
+    if (currentUser.role !== 'tresorier') { alert('هذه الصلاحية مخصصة لأمين المال فقط.'); return; }
     e.preventDefault();
     if (!reviewOrder) return;
 
@@ -325,7 +326,8 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
   };
 
   // Handlers: President Execution
-  const handlePresidentSubmit = (e: React.FormEvent) => {\n    if (currentUser.role !== 'president') { alert('تنفيذ الصرف مخصص لرئيس الجمعية فقط.'); return; }
+  const handlePresidentSubmit = (e: React.FormEvent) => {
+    if (currentUser.role !== 'president') { alert('تنفيذ الصرف مخصص لرئيس الجمعية فقط.'); return; }
     e.preventDefault();
     if (!executeOrder) return;
 
