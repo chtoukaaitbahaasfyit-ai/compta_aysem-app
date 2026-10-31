@@ -125,7 +125,13 @@ export default function App() {
     return () => { alive = false; };
   }, [currentUser.id]);
 
-  useEffect(() => {\n    if (!currentUser.id || currentUser.role !== 'tresorier') return;\n    let alive = true;\n    CloudDataService.loadDisbursementOrders().then(rows => { if (alive) { setDisbursements(rows); setCloudError(''); } }).catch(error => { if (alive) setCloudError(error instanceof Error ? error.message : 'تعذر تحميل طلبات الصرف'); });\n    return () => { alive = false; };\n  }, [currentUser.id, currentUser.role]);\n\n  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
+  useEffect(() => {
+    if (!currentUser.id || currentUser.role !== 'tresorier') return;
+    let alive = true;
+    CloudDataService.loadDisbursementOrders().then(rows => { if (alive) { setDisbursements(rows); setCloudError(''); } }).catch(error => { if (alive) setCloudError(error instanceof Error ? error.message : 'تعذر تحميل طلبات الصرف'); });
+    return () => { alive = false; };
+  }, [currentUser.id, currentUser.role]);
+\n  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
   useEffect(() => {
     // Only the president may load or persist the legacy all-modules accounting snapshot.
     // Other roles must use narrowly-scoped workflow endpoints, never app_records.
