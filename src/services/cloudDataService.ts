@@ -1,6 +1,7 @@
 /** Cloud-only accounting persistence. Browser storage is never an accounting source of truth. */
 
 import { getSupabaseSession } from './authService';
+import type { DisbursementOrder, DisbursementStatus } from '../types/accounting';
 import {
   assertSupabaseConfigured,
   SUPABASE_PUBLISHABLE_KEY,
