@@ -329,7 +329,7 @@ export default function App() {
         <div className={`mobile-sidebar-shell ${isMobileMenuOpen ? 'mobile-sidebar-open' : ''}`}>
         <Sidebar
           activeTab={activeTab}
-          onChangeTab={setActiveTab}
+          onChangeTab={(tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); }}
           entriesCount={entries.length}
           membersCount={members.length}
           projectsCount={projects.length}
@@ -339,7 +339,6 @@ export default function App() {
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           isArabic={isArabic}
-          onChangeTab={(tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); }}
         />
         </div>
 
