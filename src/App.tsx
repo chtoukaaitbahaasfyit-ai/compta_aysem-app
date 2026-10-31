@@ -125,7 +125,7 @@ export default function App() {
     return () => { alive = false; };
   }, [currentUser.id]);
 
-  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
+  useEffect(() => {\n    if (!currentUser.id || currentUser.role !== 'tresorier') return;\n    let alive = true;\n    CloudDataService.loadDisbursementOrders().then(rows => { if (alive) { setDisbursements(rows); setCloudError(''); } }).catch(error => { if (alive) setCloudError(error instanceof Error ? error.message : 'تعذر تحميل طلبات الصرف'); });\n    return () => { alive = false; };\n  }, [currentUser.id, currentUser.role]);\n\n  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
   useEffect(() => {
     // Only the president may load or persist the legacy all-modules accounting snapshot.
     // Other roles must use narrowly-scoped workflow endpoints, never app_records.
@@ -305,7 +305,7 @@ export default function App() {
       }`}
     >
       {currentUser.id && !isOnline && <div className="fixed inset-0 z-[90] bg-slate-950/80 flex items-center justify-center p-6 text-center"><div className="max-w-md rounded-2xl bg-white p-6 shadow-xl"><div className="text-xl font-bold text-rose-700 mb-2">الاتصال بالإنترنت مقطوع</div><p className="text-sm text-slate-700">AYSM COMPTA يعمل عبر الإنترنت فقط. تم إيقاف التفاعل حتى يعود الاتصال. لا تدخل أي عملية محاسبية الآن.</p></div></div>}
-      {currentUser.id && (cloudError ? <div className="bg-rose-100 text-rose-800 text-sm p-3 text-center">{cloudError}</div> : !cloudReady ? <div className="bg-amber-100 text-amber-900 text-sm p-3 text-center">جار تحميل بيانات الجمعية من قاعدة البيانات...</div> : <div className="bg-emerald-50 text-emerald-800 text-xs p-2 text-center">متصل بقاعدة البيانات السحابية — الحفظ مباشر عبر الإنترنت</div>)}
+      {currentUser.id && (cloudError ? <div className="bg-rose-100 text-rose-800 text-sm p-3 text-center">{cloudError}</div> : currentUser.role === 'president' && !cloudReady ? <div className="bg-amber-100 text-amber-900 text-sm p-3 text-center">جار تحميل بيانات الجمعية من قاعدة البيانات...</div> : <div className="bg-emerald-50 text-emerald-800 text-xs p-2 text-center">متصل بقاعدة البيانات السحابية — الحفظ مباشر عبر الإنترنت</div>)}
       {/* Top Header */}
       <Header
         profile={profile}
@@ -339,7 +339,7 @@ export default function App() {
           projectsCount={projects.length}
           subventionsCount={subventions.length}
           disbursementsCount={pendingDisbursementsCount}
-          isPresident={currentUser.role === 'president'}
+          isPresident={currentUser.role === 'president'}\n          isTreasurer={currentUser.role === 'tresorier'}
           accountingModel={profile.accountingModel}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -353,7 +353,7 @@ export default function App() {
             <button type="button" onClick={() => setIsMobileMenuOpen(true)} className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold">{isArabic ? 'القائمة' : 'Menu'}</button>
             <span className="truncate text-sm font-semibold text-slate-700">{isArabic ? 'AYSM COMPTA' : 'AYSM COMPTA'}</span>
           </div>
-          {activeTab === 'dashboard' && (
+          {currentUser.role === 'tresorier' && activeTab !== 'disbursements' && <div className="m-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900">حساب أمين المال مخصص لمراجعة طلبات الصرف والتأشير عليها فقط.</div>}\n          {currentUser.role !== 'tresorier' && activeTab === 'dashboard' && (
             <Dashboard
               profile={profile}
               entries={entries}
@@ -367,7 +367,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'entry-form' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'entry-form' && (
             <JournalEntryForm
               accounts={accounts}
               projects={projects}
@@ -378,7 +378,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'entries-list' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'entries-list' && (
             <EntriesList
               entries={entries}
               onExtourne={handleExtourne}
@@ -386,21 +386,21 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'grand-livre' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'grand-livre' && (
             <GrandLivre
               entries={entries}
               accounts={accounts}
             />
           )}
 
-          {activeTab === 'balance' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'balance' && (
             <BalanceGenerale
               entries={entries}
               accounts={accounts}
             />
           )}
 
-          {activeTab === 'chart-accounts' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'chart-accounts' && (
             <ChartOfAccounts
               accounts={accounts}
               onUpdateAccounts={(accs) => {
@@ -410,7 +410,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'recettes' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'recettes' && (
             <RecettesManager
               recettes={recettes}
               bankAccounts={bankAccounts}
@@ -422,7 +422,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'depenses' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'depenses' && (
             <DepensesManager
               depenses={depenses}
               bankAccounts={bankAccounts}
@@ -433,7 +433,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'treasury' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'treasury' && (
             <TreasuryManager
               bankAccounts={bankAccounts}
               entries={entries}
@@ -449,7 +449,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'subventions' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'subventions' && (
             <SubventionsManager
               subventions={subventions}
               projects={projects}
@@ -463,7 +463,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'projects' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'projects' && (
             <ProjectsManager
               projects={projects}
               entries={entries}
@@ -476,7 +476,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'budgets' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'budgets' && (
             <BudgetManager
               budgets={budgets}
               projects={projects}
@@ -488,7 +488,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'immobilisations' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'immobilisations' && (
             <ImmobilisationsManager
               immobilisations={immobilisations}
               fiscalYear={profile.activeFiscalYear}
@@ -499,7 +499,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'members' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'members' && (
             <MembersManager
               members={members}
               profile={profile}
@@ -511,7 +511,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'in-kind' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'in-kind' && (
             <InKindManager
               volunteers={volunteers}
               inKindContributions={inKind}
@@ -531,7 +531,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'reports' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'reports' && (
             <FinancialReports
               profile={profile}
               entries={entries}
@@ -559,7 +559,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'documents' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'documents' && (
             <DocumentsManager
               documents={documents}
               onUpdateDocuments={(docs) => {
@@ -569,13 +569,13 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'sheets-integration' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'sheets-integration' && (
             <GoogleSheetsIntegration />
           )}
 
           {activeTab === 'user-management' && currentUser.role === 'president' && <UserManagement />}
 
-          {activeTab === 'settings' && (
+          {currentUser.role !== 'tresorier' && activeTab === 'settings' && (
             <AssociationSettings
               profile={profile}
               fiscalYears={fiscalYears}
