@@ -94,7 +94,7 @@ export default function App() {
   useEffect(() => { const update = () => setIsOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
 
   // Hydrate every accounting module from Supabase after authentication. Demo seed records are never uploaded.
-  useEffect(() => { let alive = true; AuthService.restoreSession().then(user => { if (!alive) return; if (user) { setCurrentUser(user); setIsLoginModalOpen(false); } else setIsLoginModalOpen(true); }).catch(() => { if (alive) setIsLoginModalOpen(true); }); return () => { alive = false; }; }, []);
+  useEffect(() => { let alive = true; AuthService.restoreSession().then(user => { if (!alive) return; if (user) { setCurrentUser(user); if (user.role === 'tresorier') setActiveTab('disbursements'); setIsLoginModalOpen(false); } else setIsLoginModalOpen(true); }).catch(() => { if (alive) setIsLoginModalOpen(true); }); return () => { alive = false; }; }, []);
 
   useEffect(() => {
     if (!currentUser.id || currentUser.role !== 'president') { setCloudReady(false); return; }
@@ -271,7 +271,7 @@ export default function App() {
   };
 
   const handleLoginSuccess = (user: AppAuthUser) => {
-    setCloudReady(false); setCurrentUser(user);
+    setCloudReady(false); setCurrentUser(user); if (user.role === 'tresorier') setActiveTab('disbursements');
   };
 
   const handleRefreshAllData = () => {
