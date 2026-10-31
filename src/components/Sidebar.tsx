@@ -40,7 +40,8 @@ interface SidebarProps {
   subventionsCount: number;
   disbursementsCount?: number;
   isPresident?: boolean;
-  isTreasurer?: boolean;\n  isAdministrative?: boolean;
+  isTreasurer?: boolean;
+  isAdministrative?: boolean;
   accountingModel: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -72,7 +73,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   subventionsCount,
   disbursementsCount = 0,
   isPresident = false,
-  isTreasurer = false,\n  isAdministrative = false,
+  isTreasurer = false,
+  isAdministrative = false,
   accountingModel,
   isCollapsed = false,
   onToggleCollapse,
