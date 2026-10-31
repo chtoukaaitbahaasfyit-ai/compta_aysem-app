@@ -95,3 +95,49 @@
   .sage-table { min-width: 560px; }
   button { touch-action: manipulation; }
 }
+
+
+/* Responsive navigation and safe content sizing */
+.mobile-sidebar-shell { display: flex; }
+@media (max-width: 767px) {
+  .mobile-sidebar-shell {
+    display: block;
+    position: fixed;
+    z-index: 50;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(84vw, 320px);
+    max-width: 320px;
+    transform: translateX(-105%);
+    transition: transform 220ms ease;
+    box-shadow: none;
+  }
+  [dir="rtl"] .mobile-sidebar-shell {
+    left: auto;
+    right: 0;
+    transform: translateX(105%);
+  }
+  .mobile-sidebar-shell.mobile-sidebar-open {
+    transform: translateX(0);
+    box-shadow: 0 20px 60px rgba(15, 23, 42, .28);
+  }
+  .mobile-sidebar-shell aside {
+    width: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+  .mobile-sidebar-shell aside > div:nth-child(2) {
+    min-height: 0;
+  }
+  .mobile-menu-bar { min-height: 52px; }
+  main { width: 100%; min-width: 0; }
+  main > * { min-width: 0; }
+  .sage-table { min-width: 560px; }
+  .overflow-x-auto { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  input, select, textarea { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-sidebar-shell { transition: none; }
+}
