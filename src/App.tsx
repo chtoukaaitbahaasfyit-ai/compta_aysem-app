@@ -57,6 +57,7 @@ import { AssociationSettings } from './components/AssociationSettings';
 import { DisbursementManager } from './components/DisbursementManager';
 import { UserLoginModal } from './components/UserLoginModal';
 import { UserManagement } from './components/UserManagement';
+import { InviteAcceptance } from './components/InviteAcceptance';
 
 export default function App() {
   // Navigation & UI states
@@ -585,6 +586,8 @@ export default function App() {
           )}
         </main>
       </div>
+
+      <InviteAcceptance />
 
       {/* Interactive Login Modal with Role Selector */}
       <UserLoginModal
