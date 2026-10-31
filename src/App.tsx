@@ -131,7 +131,8 @@ export default function App() {
     CloudDataService.loadDisbursementOrders().then(rows => { if (alive) { setDisbursements(rows); setCloudError(''); } }).catch(error => { if (alive) setCloudError(error instanceof Error ? error.message : 'تعذر تحميل طلبات الصرف'); });
     return () => { alive = false; };
   }, [currentUser.id, currentUser.role]);
-\n  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
+
+  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
   useEffect(() => {
     // Only the president may load or persist the legacy all-modules accounting snapshot.
     // Other roles must use narrowly-scoped workflow endpoints, never app_records.
@@ -345,7 +346,8 @@ export default function App() {
           projectsCount={projects.length}
           subventionsCount={subventions.length}
           disbursementsCount={pendingDisbursementsCount}
-          isPresident={currentUser.role === 'president'}\n          isTreasurer={currentUser.role === 'tresorier'}
+          isPresident={currentUser.role === 'president'}
+          isTreasurer={currentUser.role === 'tresorier'}
           accountingModel={profile.accountingModel}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -359,7 +361,8 @@ export default function App() {
             <button type="button" onClick={() => setIsMobileMenuOpen(true)} className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold">{isArabic ? 'القائمة' : 'Menu'}</button>
             <span className="truncate text-sm font-semibold text-slate-700">{isArabic ? 'AYSM COMPTA' : 'AYSM COMPTA'}</span>
           </div>
-          {currentUser.role === 'tresorier' && activeTab !== 'disbursements' && <div className="m-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900">حساب أمين المال مخصص لمراجعة طلبات الصرف والتأشير عليها فقط.</div>}\n          {currentUser.role !== 'tresorier' && activeTab === 'dashboard' && (
+          {currentUser.role === 'tresorier' && activeTab !== 'disbursements' && <div className="m-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900">حساب أمين المال مخصص لمراجعة طلبات الصرف والتأشير عليها فقط.</div>}
+          {currentUser.role !== 'tresorier' && activeTab === 'dashboard' && (
             <Dashboard
               profile={profile}
               entries={entries}
