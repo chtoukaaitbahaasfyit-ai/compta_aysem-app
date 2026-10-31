@@ -150,6 +150,52 @@ export const CloudDataService = {
     });
   },
 
+
+  async loadDisbursementOrders(): Promise<DisbursementOrder[]> {
+    const rows = await api<Array<{ id: string; payload: DisbursementOrder; status: DisbursementStatus }>>(
+      '/rest/v1/disbursement_orders?select=id,payload,status&order=created_at.desc'
+    );
+    return (rows || []).map(row => ({ ...row.payload, id: row.id, status: row.status }));
+  },
+
+  async createDisbursementOrder(order: DisbursementOrder): Promise<DisbursementOrder> {
+    const session = requireOnlineSession();
+    const rows = await api<Array<{ id: string; payload: DisbursementOrder; status: DisbursementStatus }>>(
+      '/rest/v1/disbursement_orders?select=id,payload,status',
+      {
+        method: 'POST',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          payload: order,
+          status: order.status,
+          created_by: session.user.id,
+          created_by_role: order.createdByRole
+        })
+      }
+    );
+    if (!rows?.[0]) throw new Error('لم يتم تأكيد إنشاء طلب الصرف في قاعدة البيانات.');
+    return { ...rows[0].payload, id: rows[0].id, status: rows[0].status };
+  },
+
+  async resubmitDisbursementOrder(id: string, order: DisbursementOrder): Promise<void> {
+    await api('/rest/v1/disbursement_orders?id=eq.' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ payload: order, status: 'en_attente_tresorier' })
+    });
+  },
+
+  async decideDisbursementOrder(
+    id: string,
+    decision: 'approuve_tresorier' | 'rejete' | 'a_completer',
+    notes: string
+  ): Promise<void> {
+    await api('/rest/v1/rpc/aysm_treasurer_decide_disbursement', {
+      method: 'POST',
+      body: JSON.stringify({ p_order_id: id, p_decision: decision, p_notes: notes || null })
+    });
+  },
+
   async addAuditEvent(action: string, details: string): Promise<void> {
     const session = requireOnlineSession();
 
