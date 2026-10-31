@@ -125,7 +125,9 @@ export default function App() {
 
   // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
   useEffect(() => {
-    if (!cloudReady || !currentUser.id) return;
+    // Only the president may load or persist the legacy all-modules accounting snapshot.
+    // Other roles must use narrowly-scoped workflow endpoints, never app_records.
+    if (!cloudReady || !currentUser.id || currentUser.role !== 'president') return;
     const payload = { association_profile: profile, fiscal_years: fiscalYears, accounts, entries, recettes, depenses, disbursements, bank_accounts: bankAccounts, projects, subventions, budgets, immobilisations, members, documents, volunteers, in_kind: inKind };
     let cancelled = false;
     const timer = window.setTimeout(() => {
