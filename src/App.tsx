@@ -62,6 +62,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isArabic, setIsArabic] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   // Core Data States
   const [profile, setProfile] = useState<AssociationProfile>(() => StorageService.getProfile());
@@ -324,6 +325,8 @@ export default function App() {
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden">
         {/* SAGE 100 Sidebar */}
+        {isMobileMenuOpen && <button aria-label={isArabic ? 'إغلاق القائمة' : 'Close menu'} onClick={() => setIsMobileMenuOpen(false)} className="mobile-menu-backdrop fixed inset-0 z-40 bg-slate-950/50 md:hidden" />}
+        <div className={`mobile-sidebar-shell ${isMobileMenuOpen ? 'mobile-sidebar-open' : ''}`}>
         <Sidebar
           activeTab={activeTab}
           onChangeTab={setActiveTab}
@@ -336,10 +339,16 @@ export default function App() {
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           isArabic={isArabic}
+          onChangeTab={(tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); }}
         />
+        </div>
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-y-auto bg-slate-100">
+        <main className="flex-1 min-w-0 overflow-y-auto bg-slate-100">
+          <div className="mobile-menu-bar md:hidden sticky top-0 z-30 flex items-center justify-between gap-3 bg-white border-b border-slate-200 px-3 py-2 shadow-sm">
+            <button type="button" onClick={() => setIsMobileMenuOpen(true)} className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold">{isArabic ? 'القائمة' : 'Menu'}</button>
+            <span className="truncate text-sm font-semibold text-slate-700">{isArabic ? 'AYSM COMPTA' : 'AYSM COMPTA'}</span>
+          </div>
           {activeTab === 'dashboard' && (
             <Dashboard
               profile={profile}
