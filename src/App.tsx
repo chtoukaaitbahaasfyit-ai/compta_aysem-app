@@ -347,7 +347,8 @@ export default function App() {
           subventionsCount={subventions.length}
           disbursementsCount={pendingDisbursementsCount}
           isPresident={currentUser.role === 'president'}
-          isTreasurer={currentUser.role === 'tresorier'}\n          isAdministrative={currentUser.role === 'responsable_administratif'}
+          isTreasurer={currentUser.role === 'tresorier'}
+          isAdministrative={currentUser.role === 'responsable_administratif'}
           accountingModel={profile.accountingModel}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
