@@ -40,7 +40,7 @@ interface SidebarProps {
   subventionsCount: number;
   disbursementsCount?: number;
   isPresident?: boolean;
-  isTreasurer?: boolean;
+  isTreasurer?: boolean;\n  isAdministrative?: boolean;
   accountingModel: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -72,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   subventionsCount,
   disbursementsCount = 0,
   isPresident = false,
-  isTreasurer = false,
+  isTreasurer = false,\n  isAdministrative = false,
   accountingModel,
   isCollapsed = false,
   onToggleCollapse,
@@ -160,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   // Filter sections and items if search is active
-  const roleSections = isTreasurer ? sections.filter(section => section.title === 'DÉCAISSEMENTS & VALIDATIONS') : sections;
+  const roleSections = isTreasurer ? sections.filter(section => section.title === 'DÉCAISSEMENTS & VALIDATIONS') : isAdministrative ? sections.filter(section => section.title !== 'ADMINISTRATION') : sections;
   const filteredSections = roleSections.map(section => ({
     ...section,
     items: section.items.filter(item => {
