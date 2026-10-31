@@ -22,7 +22,7 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
 async function profileFor(session: AuthSession): Promise<AppAuthUser> {
   const rows = await request<Array<{ id: string; display_name: string; role: string; is_active: boolean }>>('/rest/v1/profiles?select=id,display_name,role,is_active&id=eq.' + encodeURIComponent(session.user.id), {}, session.access_token);
   const profile = rows[0];
-  if (!profile || !profile.is_active || profile.role !== 'president') throw new Error('الدخول متاح حالياً لحساب رئيس الجمعية (المدير) فقط. سيتم تفعيل باقي الأدوار لاحقاً.');
+  if (!profile || !profile.is_active || !['president', 'tresorier'].includes(profile.role)) throw new Error('هذا الحساب غير مفعل للدخول إلى النظام. يرجى التواصل مع رئيس الجمعية.');
   const email = session.user.email || '';
   const displayName = profile.display_name || String(session.user.user_metadata?.display_name || email.split('@')[0]);
   const role = profile.role as UserRole;
