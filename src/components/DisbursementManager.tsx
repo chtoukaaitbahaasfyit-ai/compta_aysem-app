@@ -1146,10 +1146,10 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
               <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-amber-800 text-[11px] space-y-1">
                 <div className="font-bold flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4 text-amber-700" />
-                  <span>توليد القيد المحاسبي التلقائي بالدفتر واليومية</span>
+                  <span>تنبيه: التنفيذ المحاسبي غير متاح حالياً</span>
                 </div>
                 <p>
-                  بمجرد تأكيد التنفيذ، سيقوم النظام تلقائياً بتسجيل قيد محاسبي معتمد باليومية العامة للجمعية وتحديث رصيد الحساب المالي وميزانية المشروع فوراً.
+                  تم إيقاف تأكيد الصرف مؤقتاً. لن يتم تسجيل قيد أو تغيير الأرصدة حتى تجهيز معاملة آمنة ومتكاملة داخل قاعدة البيانات.
                 </p>
               </div>
 
@@ -1163,10 +1163,11 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  disabled
+                  className="px-4 py-2 bg-slate-400 text-white rounded font-semibold flex items-center gap-1.5 cursor-not-allowed shadow-sm"
                 >
                   <Check className="w-4 h-4" />
-                  <span>تأكيد الصرف والتسجيل المحاسبي</span>
+                  <span>التنفيذ المحاسبي غير متاح حالياً</span>
                 </button>
               </div>
             </form>
