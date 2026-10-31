@@ -94,10 +94,10 @@ export default function App() {
   useEffect(() => { const update = () => setIsOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
 
   // Hydrate every accounting module from Supabase after authentication. Demo seed records are never uploaded.
-  useEffect(() => { let alive = true; AuthService.restoreSession().then(user => { if (!alive) return; if (user) { setCurrentUser(user); if (user.role === 'tresorier') setActiveTab('disbursements'); setIsLoginModalOpen(false); } else setIsLoginModalOpen(true); }).catch(() => { if (alive) setIsLoginModalOpen(true); }); return () => { alive = false; }; }, []);
+  useEffect(() => { let alive = true; AuthService.restoreSession().then(user => { if (!alive) return; if (user) { setCurrentUser(user); if (user.role === 'tresorier') setActiveTab('disbursements'); else setActiveTab('dashboard'); else setActiveTab('dashboard'); setIsLoginModalOpen(false); } else setIsLoginModalOpen(true); }).catch(() => { if (alive) setIsLoginModalOpen(true); }); return () => { alive = false; }; }, []);
 
   useEffect(() => {
-    if (!currentUser.id || currentUser.role !== 'president') { setCloudReady(false); return; }
+    if (!currentUser.id || !['president', 'responsable_administratif'].includes(currentUser.role)) { setCloudReady(false); return; }
     let alive = true; setCloudReady(false); setCloudError('');
     setProfile({ ...profile, name: 'Association A.Y.S.M', arabicName: 'أكاديمية دعم ومواكبة الشباب', sigle: 'A.Y.S.M', address: '', city: 'Sidi Bibi', phone: '', email: 'Lahsencherkaoui2@gmail.com', website: '', ifFiscal: '', patente: '', cnss: '', ice: '', rib: '', bankName: '', agency: '', president: 'Lahsen Cherkaoui', treasurer: '', secretary: '', creationDate: '', receiptReceiptNumber: '', accountingModel: 'normal', activeFiscalYear: '2026', currency: 'MAD' });
     setFiscalYears([]); setAccounts(MOROCCAN_ASSOCIATION_ACCOUNTS); setEntries([]); setRecettes([]); setDepenses([]); setDisbursements([]); setBankAccounts([]); setProjects([]); setSubventions([]); setBudgets([]); setImmobilisations([]); setMembers([]); setDocuments([]); setVolunteers([]); setInKind([]);
@@ -298,7 +298,7 @@ export default function App() {
   const pendingDisbursementsCount =
     currentUser.role === 'tresorier'
       ? disbursements.filter(d => d.status === 'en_attente_tresorier').length
-      : currentUser.role === 'president'
+      : ['president', 'responsable_administratif'].includes(currentUser.role)
       ? disbursements.filter(d => d.status === 'en_attente_president' || d.status === 'approuve_tresorier').length
       : currentUser.role === 'responsable_administratif'
       ? disbursements.filter(d => d.status === 'a_completer').length
@@ -347,7 +347,7 @@ export default function App() {
           subventionsCount={subventions.length}
           disbursementsCount={pendingDisbursementsCount}
           isPresident={currentUser.role === 'president'}
-          isTreasurer={currentUser.role === 'tresorier'}
+          isTreasurer={currentUser.role === 'tresorier'}\n          isAdministrative={currentUser.role === 'responsable_administratif'}
           accountingModel={profile.accountingModel}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
