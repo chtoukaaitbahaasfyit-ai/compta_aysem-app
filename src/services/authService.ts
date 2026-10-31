@@ -28,6 +28,23 @@ async function profileFor(session: AuthSession): Promise<AppAuthUser> {
   const role = profile.role as UserRole;
   return { id: profile.id, username: email, name: displayName, nameArabic: displayName, email, role, roleArabic: ROLE_LABELS[role], avatar: displayName.slice(0,2).toUpperCase() };
 }
+
+export type PendingInvite = { access_token: string; refresh_token: string; type: string; expires_in?: string };
+export function getPendingInvite(): PendingInvite | null {
+  if (typeof window === 'undefined' || !window.location.hash) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const access_token = params.get('access_token');
+  const refresh_token = params.get('refresh_token');
+  const type = params.get('type') || '';
+  if (params.get('error')) throw new Error(params.get('error_description') || params.get('error') || 'تعذر تأكيد الدعوة');
+  if (!access_token || !refresh_token || !['invite','recovery','signup'].includes(type)) return null;
+  return { access_token, refresh_token, type, expires_in: params.get('expires_in') || undefined };
+}
+export async function setInvitedUserPassword(accessToken: string, password: string): Promise<void> {
+  if (password.length < 8) throw new Error('كلمة المرور خاصها تكون على الأقل 8 أحرف.');
+  await request('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password }) }, accessToken);
+}
+
 export const AuthService = {
   getCurrentUser(): AppAuthUser | null {
     const session = getSupabaseSession();
