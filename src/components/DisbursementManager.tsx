@@ -47,6 +47,7 @@ import {
 import { AuthService } from '../services/authService';
 import { StorageService } from '../services/storageService';
 import { AccountingEngine } from '../services/accountingEngine';
+import { CloudDataService } from '../services/cloudDataService';
 import { numberToArabicWords } from '../utils/numberToWordsArabic';
 import { DisbursementVoucherModal } from './DisbursementVoucherModal';
 
@@ -165,7 +166,7 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
   };
 
   // Handlers: Create new request
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = parseFloat(formData.amount);
     if (isNaN(numAmount) || numAmount <= 0) {
@@ -206,7 +207,7 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
           uploadedAt: timestamp
         }
       ] : [],
-      status: 'en_attente_president', // First release: president is the only active approver
+      status: 'en_attente_tresorier',
       createdById: currentUser.id,
       createdByRole: currentUser.role,
       createdByName: currentUser.name,
@@ -216,9 +217,9 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
         {
           id: `hist-${Date.now()}`,
           timestamp,
-          status: 'en_attente_president',
-          action: 'Création et soumission de la demande au président',
-          actionArabic: 'إنشاء وإحالة طلب الصرف إلى رئيس الجمعية',
+          status: 'en_attente_tresorier',
+          action: 'Création et soumission au Trésorier',
+          actionArabic: 'إنشاء وإحالة طلب الصرف إلى أمين المال',
           userName: currentUser.name,
           userRole: currentUser.role,
           notes: formData.notesAdministrative || 'طلب صادر ومرفق بالوثائق التبريرية.'
@@ -227,8 +228,13 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
       updatedAt: timestamp
     };
 
-    const updated = StorageService.addDisbursement(newOrder);
-    onUpdateOrders(updated);
+    try {
+      const savedOrder = await CloudDataService.createDisbursementOrder(newOrder);
+      onUpdateOrders([savedOrder, ...orders]);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'تعذر حفظ طلب الصرف سحابياً.');
+      return;
+    }
     setIsNewModalOpen(false);
     setFormData({
       beneficiary: '',
@@ -243,11 +249,11 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
       attachmentName: '',
       attachmentSize: ''
     });
-    alert(`تم إنشاء طلب الصرف ${orderNumber} وإحالته إلى الرئيس للمراجعة والتنفيذ.`);
+    alert(`تم إنشاء طلب الصرف ${orderNumber} وإحالته إلى أمين المال للمراجعة.`);
   };
 
   // Handlers: Treasurer Review
-  const handleTreasurerSubmit = (e: React.FormEvent) => {
+  const handleTreasurerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewOrder) return;
 
@@ -272,7 +278,7 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
       actionLabel = 'Demande de complément d\'information';
       actionArabic = 'إرجاع الطلب للمسؤول الإداري لاستكمال الوثائق والمعلومات';
     } else {
-      nextStatus = 'en_attente_president';
+      nextStatus = 'approuve_tresorier';
     }
 
     const updatedOrder: DisbursementOrder = {
@@ -299,13 +305,19 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
       updatedAt: timestamp
     };
 
-    const updated = StorageService.updateDisbursement(updatedOrder);
-    onUpdateOrders(updated);
+    try {
+      const decision = treasurerDecision === 'approuve' ? 'approuve_tresorier' : treasurerDecision;
+      await CloudDataService.decideDisbursementOrder(reviewOrder.id, decision, treasurerNotes.trim());
+      onUpdateOrders(orders.map(order => order.id === reviewOrder.id ? updatedOrder : order));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'تعذر تسجيل قرار أمين المال سحابياً.');
+      return;
+    }
     setReviewOrder(null);
     setTreasurerNotes('');
     alert(
-      nextStatus === 'en_attente_president'
-        ? `تمت موافقة أمين المال على طلب الصرف ${reviewOrder.orderNumber} وإحالته إلى السيد الرئيس لتنفيذ الأداء.`
+      nextStatus === 'approuve_tresorier'
+        ? `تمت موافقة أمين المال على طلب الصرف ${reviewOrder.orderNumber} وإحالته إلى الرئيس.`
         : nextStatus === 'a_completer'
         ? `تم إرجاع الطلب ${reviewOrder.orderNumber} إلى المسؤول الإداري لاستكمال الوثائق.`
         : `تم رفض الطلب ${reviewOrder.orderNumber}.`
