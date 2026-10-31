@@ -5,7 +5,7 @@ import { assertSupabaseConfigured, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from
 type AuthSession = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number; user: { id: string; email?: string; user_metadata?: Record<string, unknown> } };
 export const SESSION_KEY = 'aysm_supabase_session_v1';
 const ROLE_LABELS: Record<string, string> = {
-  president: 'رئيس الجمعية (المدير)', tresorier: 'لاحقاً', responsable_administratif: 'لاحقاً', pending: 'في انتظار التفعيل'
+  president: 'رئيس الجمعية (المدير)', tresorier: 'أمين المال', responsable_administratif: 'المسؤول الإداري', pending: 'في انتظار التفعيل'
 };
 const jsonHeaders = (token?: string) => ({ apikey: SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) });
 export function getSupabaseSession(): AuthSession | null {
@@ -52,8 +52,8 @@ export const AuthService = {
     catch (error) { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers: jsonHeaders(session.access_token) }).catch(()=>{}); throw error; }
   },
   async logout(): Promise<void> { const session = getSupabaseSession(); if (session) await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:'POST', headers: jsonHeaders(session.access_token) }).catch(()=>{}); saveSession(null); sessionStorage.removeItem('aysm_profile_cache'); },
-  canCreateDisbursement(user: AppAuthUser): boolean { return user.role === 'president'; },
+  canCreateDisbursement(user: AppAuthUser): boolean { return user.role === 'president' || user.role === 'responsable_administratif'; },
   canApproveAsTreasurer(user: AppAuthUser, order: DisbursementOrder) { if (user.role !== 'tresorier') return { allowed:false, reason:'صلاحية الاعتماد محصورة في أمين المال.' }; if (order.status !== 'en_attente_tresorier') return { allowed:false, reason:'الطلب ليس في انتظار موافقة أمين المال.' }; if (order.createdById === user.id) return { allowed:false, reason:'لا يمكن اعتماد طلب صرف أنشأه أمين المال نفسه.' }; return { allowed:true }; },
-  canExecuteAsPresident(user: AppAuthUser, order: DisbursementOrder) { if (user.role !== 'president') return { allowed:false, reason:'تنفيذ الصرف محصور في رئيس الجمعية.' }; if (!['approuve_tresorier','en_attente_president','en_attente_tresorier'].includes(order.status)) return { allowed:false, reason:'يرجى مراجعة الطلب قبل تنفيذ الصرف.' }; if (order.isExecutedAccounting) return { allowed:false, reason:'تم تنفيذ هذا الطلب مسبقاً.' }; return { allowed:true }; },
+  canExecuteAsPresident(user: AppAuthUser, order: DisbursementOrder) { if (user.role !== 'president') return { allowed:false, reason:'تنفيذ الصرف محصور في رئيس الجمعية.' }; if (order.status !== 'approuve_tresorier') return { allowed:false, reason:'لا يمكن تنفيذ الصرف قبل موافقة أمين المال.' }; if (order.isExecutedAccounting) return { allowed:false, reason:'تم تنفيذ هذا الطلب مسبقاً.' }; return { allowed:true }; },
   canEditOrResubmit(user: AppAuthUser, order: DisbursementOrder): boolean { return user.role === 'responsable_administratif' && ['brouillon','a_completer'].includes(order.status); }
 };
