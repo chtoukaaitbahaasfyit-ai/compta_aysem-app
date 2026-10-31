@@ -27,7 +27,8 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  ClipboardCheck
+  ClipboardCheck,
+  UserCog
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,6 +39,7 @@ interface SidebarProps {
   projectsCount: number;
   subventionsCount: number;
   disbursementsCount?: number;
+  isPresident?: boolean;
   accountingModel: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -68,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   projectsCount,
   subventionsCount,
   disbursementsCount = 0,
+  isPresident = false,
   accountingModel,
   isCollapsed = false,
   onToggleCollapse,
@@ -76,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [menuSearch, setMenuSearch] = useState('');
 
   const sections: SidebarSection[] = [
+    ...(isPresident ? [{ title: 'ADMINISTRATION', arabicTitle: 'إدارة المستخدمين', items: [{ id: 'user-management', label: 'User management', arabicLabel: 'إدارة المستخدمين والصلاحيات', icon: UserCog }] }] : []),
     {
       title: "VUE D'ENSEMBLE",
       arabicTitle: 'نظرة عامة',
