@@ -1,0 +1,6 @@
+{
+  "name": "ASSOCIATION COMPTA PRO",
+  "description": "Logiciel professionnel de comptabilité et de gestion financière pour les associations marocaines, conforme au Plan Comptable du CNC (Avis n°23 de 2023) et inspiré de SAGE 100.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
