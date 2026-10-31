@@ -129,6 +129,19 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
 
   // Reconciled bank account entries
   const currentReconcileAcc = bankAccounts.find(b => b.id === reconcileAccountId) || bankAccounts[0];
+ if (!currentReconcileAcc) {
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <h2 className="text-xl font-bold text-slate-900">
+        Gestion de Trésorerie & Rapprochement Bancaire
+      </h2>
+      <p className="mt-4 p-4 rounded-lg bg-amber-50 text-amber-800">
+        Aucun compte bancaire ou caisse n'est enregistré.
+        Veuillez vérifier les comptes avant de procéder au rapprochement.
+      </p>
+    </div>
+  );
+}
   const accountEntries = entries.filter(e =>
     e.status !== 'extourne' &&
     e.lines.some(l => l.accountNumber === currentReconcileAcc.accountNumber)
