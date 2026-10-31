@@ -345,35 +345,11 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
       return;
     }
 
-    const result = StorageService.executeDisbursementAndRecordAccounting(executeOrder.id, {
-      bankAccountId: selectedBankAccountId,
-      actualPaymentMethod,
-      checkNumber: checkNumber.trim() || undefined,
-      transferReference: transferReference.trim() || undefined,
-      paymentProofName: paymentProofName.trim() || undefined,
-      presidentUser: { id: currentUser.id, name: currentUser.name },
-      notes: executionNotes.trim() || undefined
-    });
-
-    if (!result.success) {
-      alert(result.error || 'حدث خطأ أثناء تنفيذ الصرف.');
-      return;
-    }
-
-    onRefreshAllData();
-    setExecuteOrder(null);
-    setCheckNumber('');
-    setTransferReference('');
-    setPaymentProofName('');
-    setExecutionNotes('');
-
-    alert(
-      `تم تنفيذ الصرف بنجاح!\n` +
-      `✓ تم توليد القيد المحاسبي برقم: ${result.entry?.pieceNumber}\n` +
-      `✓ تم خصم المبلغ من رصيد الحساب البنكي\n` +
-      `✓ تم تحديث ميزانية المشروع والمصروف الفعلي\n` +
-      `✓ تم قفل الطلب لمنع تكرار الصرف.`
-    );
+    // Safe release gate: the current server RPC records authorization only.
+    // It does not atomically create the journal entry or update bank/project balances.
+    // Never fall back to browser-side accounting execution.
+    alert('تنفيذ الصرف موقوف مؤقتاً: يلزم أولاً ربط موافقة الرئيس بقيد محاسبي وتحديث الأرصدة داخل معاملة واحدة آمنة في قاعدة البيانات.');
+    return;
   };
 
   return (
