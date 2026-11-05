@@ -40,3 +40,13 @@
 ## Configuration client
 
 Utiliser uniquement la clé publique `publishable` dans l'application cliente, avec RLS activé. Ne jamais intégrer `service_role`, une clé secrète ou un mot de passe de base de données dans le navigateur, le dépôt ou un fichier `.env` livré aux utilisateurs.
+
+## Mise à jour 05 novembre 2026 (revue de code)
+
+- Cache `StorageService` en mémoire uniquement (plus de localStorage ni de données démo pour la comptabilité).
+- Sauvegarde par module avec contrôle de `revision` (verrouillage optimiste); conflit → blocage + rechargement.
+- Sauvegarde atomique : appliquer `supabase/migrations/202611050001_aysm_atomic_save_and_guards.sql` dans l'éditeur SQL Supabase (après sauvegarde). Sans elle, l'application bascule automatiquement sur l'enregistrement module par module (non atomique).
+- Le dernier président actif ne peut plus être rétrogradé/désactivé/supprimé (trigger).
+- Renouvellement automatique du jeton de session; ouverture de la connexion si la session est expirée.
+- `TreasuryManager.tsx` volontairement non modifié (consigne du propriétaire).
+- Variables Vercel : `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (jamais `service_role`).

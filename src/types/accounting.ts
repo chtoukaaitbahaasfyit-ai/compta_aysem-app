@@ -6,7 +6,7 @@
 
 export type AccountingModel = 'normal' | 'simplifie' | 'super_simplifie';
 
-export type UserRole = 'admin' | 'president' | 'tresorier' | 'responsable_administratif' | 'comptable' | 'auditeur';
+export type UserRole = 'pending' | 'admin' | 'president' | 'tresorier' | 'responsable_administratif' | 'comptable' | 'auditeur';
 
 export interface AppUser {
   id: string;

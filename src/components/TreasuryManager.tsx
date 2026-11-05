@@ -4,7 +4,7 @@
  * Gestion de la Trésorerie & Rapprochement Bancaire pour ASSOCIATION COMPTA PRO
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Landmark,
   Wallet,
@@ -20,6 +20,13 @@ import {
 
 import { BankAccount, AccountingEntry } from '../types/accounting';
 import { AccountingEngine } from '../services/accountingEngine';
+
+// Safe numeric balance (legacy/partial cloud records may lack the field) and cent-exact rounding.
+const bal = (a?: Pick<BankAccount, 'currentBalance'> | null): number => {
+  const n = Number(a?.currentBalance);
+  return Number.isFinite(n) ? n : 0;
+};
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 interface TreasuryManagerProps {
   bankAccounts: BankAccount[];
@@ -68,6 +75,17 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
   const [bankStatementBalance, setBankStatementBalance] = useState<number>(0);
   const [checkedEntryIds, setCheckedEntryIds] = useState<string[]>([]);
 
+  // Keep the selected accounts valid when the list loads/changes (ids chosen at mount may no longer exist).
+  useEffect(() => {
+    const ids = bankAccounts.map(b => b.id);
+    const firstBank = bankAccounts.find(b => b.type === 'banque')?.id || '';
+    if (!ids.includes(sourceAccountId)) setSourceAccountId(ids[0] || '');
+    if (!ids.includes(targetAccountId) || targetAccountId === sourceAccountId) {
+      setTargetAccountId(ids.find(id => id !== (ids.includes(sourceAccountId) ? sourceAccountId : ids[0])) || '');
+    }
+    if (!ids.includes(reconcileAccountId)) setReconcileAccountId(firstBank);
+  }, [bankAccounts]);
+
   // Ajouter un compte bancaire ou une caisse
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +103,7 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
       return;
     }
 
-    if (newInitialBalance < 0) {
+    if (!Number.isFinite(newInitialBalance) || newInitialBalance < 0) {
       alert('Le solde initial ne peut pas être négatif.');
       return;
     }
@@ -97,8 +115,8 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
       bankName: newAccountType === 'banque' ? newBankName.trim() : 'Caisse',
       rib: newAccountType === 'banque' ? newRib.trim() : '',
       accountNumber,
-      initialBalance: newInitialBalance,
-      currentBalance: newInitialBalance,
+      initialBalance: round2(newInitialBalance),
+      currentBalance: round2(newInitialBalance),
       signatories: newAccountType === 'banque'
         ? newSignatories.split(',').map(s => s.trim()).filter(Boolean)
         : []
@@ -148,17 +166,24 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
       return;
     }
 
-    if (transferAmount <= 0) {
+    if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
       alert('Veuillez spécifier un montant positif.');
       return;
     }
 
-    if (srcAcc.currentBalance < transferAmount) {
+    if (bal(srcAcc) < transferAmount) {
       alert('Le solde du compte source est insuffisant.');
       return;
     }
 
-    const pieceNum = `VIR-${fiscalYear}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Sequential, collision-free piece number (the previous random 4-digit number could repeat).
+    const virPrefix = `VIR-${fiscalYear}-`;
+    const lastVirSeq = entries.reduce((max, e) => {
+      if (!e.pieceNumber?.startsWith(virPrefix)) return max;
+      const n = parseInt(e.pieceNumber.slice(virPrefix.length), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    const pieceNum = `${virPrefix}${String(lastVirSeq + 1).padStart(4, '0')}`;
     const operationDate = new Date().toISOString();
 
     const entry: AccountingEntry = {
@@ -200,11 +225,11 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
 
     const updated = bankAccounts.map(b => {
       if (b.id === srcAcc.id) {
-        return { ...b, currentBalance: b.currentBalance - transferAmount };
+        return { ...b, currentBalance: round2(bal(b) - transferAmount) };
       }
 
       if (b.id === tgtAcc.id) {
-        return { ...b, currentBalance: b.currentBalance + transferAmount };
+        return { ...b, currentBalance: round2(bal(b) + transferAmount) };
       }
 
       return b;
@@ -242,7 +267,7 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
       )
     : [];
 
-  const bookBalance = currentReconcileAcc?.currentBalance ?? 0;
+  const bookBalance = bal(currentReconcileAcc);
 
   const reconciliationDifference =
     Math.round((bookBalance - bankStatementBalance) * 100) / 100;
@@ -503,7 +528,7 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
                       </span>
 
                       <span className="text-2xl font-bold font-mono-acc text-slate-900">
-                        {AccountingEngine.formatMAD(acc.currentBalance ?? 0)}
+                        {AccountingEngine.formatMAD(bal(acc))}
                       </span>
                     </div>
                   </div>
@@ -574,7 +599,7 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
                   >
                     {bankAccounts.map(b => (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({b.accountNumber}) - Solde: {b.currentBalance} DH
+                        {b.name} ({b.accountNumber}) - Solde: {bal(b)} DH
                       </option>
                     ))}
                   </select>
@@ -592,7 +617,7 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
                   >
                     {bankAccounts.map(b => (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({b.accountNumber}) - Solde: {b.currentBalance} DH
+                        {b.name} ({b.accountNumber}) - Solde: {bal(b)} DH
                       </option>
                     ))}
                   </select>

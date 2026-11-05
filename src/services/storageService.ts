@@ -24,23 +24,7 @@ import {
   DisbursementOrder
 } from '../types/accounting';
 import { MOROCCAN_ASSOCIATION_ACCOUNTS } from '../data/moroccanChartOfAccounts';
-import {
-  INITIAL_ASSOCIATION_PROFILE,
-  INITIAL_FISCAL_YEARS,
-  INITIAL_BANK_ACCOUNTS,
-  INITIAL_PROJECTS,
-  INITIAL_SUBVENTIONS,
-  INITIAL_MEMBERS,
-  INITIAL_IMMOBILISATIONS,
-  INITIAL_ENTRIES,
-  INITIAL_RECETTES,
-  INITIAL_DEPENSES,
-  INITIAL_BUDGET_ITEMS,
-  INITIAL_DOCUMENTS,
-  INITIAL_VOLUNTEERS,
-  INITIAL_IN_KIND
-} from '../data/initialData';
-import { INITIAL_DISBURSEMENTS } from '../data/initialDisbursements';
+import { INITIAL_ASSOCIATION_PROFILE } from '../data/initialData';
 import { CloudDataService } from './cloudDataService';
 
 const STORAGE_KEYS = {
@@ -64,30 +48,27 @@ const STORAGE_KEYS = {
   GAS_WEBHOOK_URL: 'acp_gas_webhook_url'
 };
 
+/**
+ * In-memory mirror of the cloud data. Supabase is the only source of truth:
+ * nothing accounting-related is read from or written to browser storage, and
+ * no demo/seed record is ever used as a default. App.tsx hydrates this cache
+ * from the cloud payload and keeps it in sync with React state.
+ */
+const memoryStore = new Map<string, unknown>();
+let currentActor = 'Utilisateur en cours';
+
 function safeGet<T>(key: string, defaultValue: T): T {
-  try {
-    const item = localStorage.getItem(key);
-    if (!item) return defaultValue;
-    const parsed = JSON.parse(item);
-    if (Array.isArray(defaultValue)) {
-      return Array.isArray(parsed) ? (parsed as unknown as T) : defaultValue;
-    }
-    if (typeof defaultValue === 'object' && defaultValue !== null) {
-      return { ...defaultValue, ...parsed };
-    }
-    return parsed;
-  } catch (err) {
-    console.error(`Error reading ${key} from localStorage`, err);
-    return defaultValue;
+  if (!memoryStore.has(key)) return defaultValue;
+  const value = memoryStore.get(key);
+  if (Array.isArray(defaultValue)) return (Array.isArray(value) ? value : defaultValue) as T;
+  if (typeof defaultValue === 'object' && defaultValue !== null) {
+    return value && typeof value === 'object' ? ({ ...defaultValue, ...(value as object) } as T) : defaultValue;
   }
+  return (value ?? defaultValue) as T;
 }
 
 function safeSet<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (err) {
-    console.error(`Error saving ${key} to localStorage`, err);
-  }
+  memoryStore.set(key, value);
 }
 
 export const StorageService = {
@@ -99,7 +80,7 @@ export const StorageService = {
   },
 
   // Exercices comptables
-  getFiscalYears: (): FiscalYear[] => safeGet(STORAGE_KEYS.FISCAL_YEARS, INITIAL_FISCAL_YEARS),
+  getFiscalYears: (): FiscalYear[] => safeGet<FiscalYear[]>(STORAGE_KEYS.FISCAL_YEARS, []),
   saveFiscalYears: (years: FiscalYear[]): void => safeSet(STORAGE_KEYS.FISCAL_YEARS, years),
 
   // Plan comptable
@@ -111,7 +92,7 @@ export const StorageService = {
   },
 
   // Écritures comptables
-  getEntries: (): AccountingEntry[] => safeGet(STORAGE_KEYS.ENTRIES, INITIAL_ENTRIES),
+  getEntries: (): AccountingEntry[] => safeGet<AccountingEntry[]>(STORAGE_KEYS.ENTRIES, []),
   saveEntries: (entries: AccountingEntry[]): void => safeSet(STORAGE_KEYS.ENTRIES, entries),
   addEntry: (entry: AccountingEntry): AccountingEntry[] => {
     const entries = StorageService.getEntries();
@@ -122,15 +103,15 @@ export const StorageService = {
   },
 
   // Recettes
-  getRecettes: (): Recette[] => safeGet(STORAGE_KEYS.RECETTES, INITIAL_RECETTES),
+  getRecettes: (): Recette[] => safeGet<Recette[]>(STORAGE_KEYS.RECETTES, []),
   saveRecettes: (recettes: Recette[]): void => safeSet(STORAGE_KEYS.RECETTES, recettes),
 
   // Dépenses
-  getDepenses: (): Depense[] => safeGet(STORAGE_KEYS.DEPENSES, INITIAL_DEPENSES),
+  getDepenses: (): Depense[] => safeGet<Depense[]>(STORAGE_KEYS.DEPENSES, []),
   saveDepenses: (depenses: Depense[]): void => safeSet(STORAGE_KEYS.DEPENSES, depenses),
 
   // Ordres de décaissement et validations (نظام الصرف والموافقات الإدارية والمالية)
-  getDisbursements: (): DisbursementOrder[] => safeGet(STORAGE_KEYS.DISBURSEMENTS, INITIAL_DISBURSEMENTS),
+  getDisbursements: (): DisbursementOrder[] => safeGet<DisbursementOrder[]>(STORAGE_KEYS.DISBURSEMENTS, []),
   saveDisbursements: (orders: DisbursementOrder[]): void => safeSet(STORAGE_KEYS.DISBURSEMENTS, orders),
 
   addDisbursement: (order: DisbursementOrder): DisbursementOrder[] => {
@@ -185,10 +166,10 @@ export const StorageService = {
     }
 
     // Contrôle de solde disponible
-    if (bankAccount.currentBalance < order.amount) {
+    if (!Number.isFinite(bankAccount.currentBalance) || bankAccount.currentBalance < order.amount) {
       return {
         success: false,
-        error: `الرصيد المتاح في ${bankAccount.name} (${bankAccount.currentBalance.toLocaleString()} درهم) غير كافٍ لصرف مبلغ ${order.amount.toLocaleString()} درهم.`
+        error: `الرصيد المتاح في ${bankAccount.name} (${(Number(bankAccount.currentBalance) || 0).toLocaleString()} درهم) غير كافٍ لصرف مبلغ ${order.amount.toLocaleString()} درهم.`
       };
     }
 
@@ -348,51 +329,43 @@ export const StorageService = {
   },
 
   // Comptes bancaires et caisses
-  getBankAccounts: (): BankAccount[] => safeGet(STORAGE_KEYS.BANK_ACCOUNTS, INITIAL_BANK_ACCOUNTS),
+  getBankAccounts: (): BankAccount[] => safeGet<BankAccount[]>(STORAGE_KEYS.BANK_ACCOUNTS, []),
   saveBankAccounts: (accounts: BankAccount[]): void => safeSet(STORAGE_KEYS.BANK_ACCOUNTS, accounts),
 
   // Subventions
-  getSubventions: (): Subvention[] => safeGet(STORAGE_KEYS.SUBVENTIONS, INITIAL_SUBVENTIONS),
+  getSubventions: (): Subvention[] => safeGet<Subvention[]>(STORAGE_KEYS.SUBVENTIONS, []),
   saveSubventions: (subventions: Subvention[]): void => safeSet(STORAGE_KEYS.SUBVENTIONS, subventions),
 
   // Projets
-  getProjects: (): Project[] => safeGet(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS),
+  getProjects: (): Project[] => safeGet<Project[]>(STORAGE_KEYS.PROJECTS, []),
   saveProjects: (projects: Project[]): void => safeSet(STORAGE_KEYS.PROJECTS, projects),
 
   // Budgets
-  getBudgets: (): BudgetItem[] => safeGet(STORAGE_KEYS.BUDGETS, INITIAL_BUDGET_ITEMS),
+  getBudgets: (): BudgetItem[] => safeGet<BudgetItem[]>(STORAGE_KEYS.BUDGETS, []),
   saveBudgets: (budgets: BudgetItem[]): void => safeSet(STORAGE_KEYS.BUDGETS, budgets),
 
   // Immobilisations
-  getImmobilisations: (): Immobilisation[] => safeGet(STORAGE_KEYS.IMMOBILISATIONS, INITIAL_IMMOBILISATIONS),
+  getImmobilisations: (): Immobilisation[] => safeGet<Immobilisation[]>(STORAGE_KEYS.IMMOBILISATIONS, []),
   saveImmobilisations: (immobs: Immobilisation[]): void => safeSet(STORAGE_KEYS.IMMOBILISATIONS, immobs),
 
   // Membres / Adhérents
-  getMembers: (): Member[] => safeGet(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS),
+  getMembers: (): Member[] => safeGet<Member[]>(STORAGE_KEYS.MEMBERS, []),
   saveMembers: (members: Member[]): void => safeSet(STORAGE_KEYS.MEMBERS, members),
 
   // GED / Documents
-  getDocuments: (): DocumentArchive[] => safeGet(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS),
+  getDocuments: (): DocumentArchive[] => safeGet<DocumentArchive[]>(STORAGE_KEYS.DOCUMENTS, []),
   saveDocuments: (docs: DocumentArchive[]): void => safeSet(STORAGE_KEYS.DOCUMENTS, docs),
 
   // Bénévolat et Contributions en nature (Classe 0 / ETIC S2, S3)
-  getVolunteers: (): VolunteerWork[] => safeGet(STORAGE_KEYS.VOLUNTEERS, INITIAL_VOLUNTEERS),
+  getVolunteers: (): VolunteerWork[] => safeGet<VolunteerWork[]>(STORAGE_KEYS.VOLUNTEERS, []),
   saveVolunteers: (vols: VolunteerWork[]): void => safeSet(STORAGE_KEYS.VOLUNTEERS, vols),
-  getInKind: (): InKindContribution[] => safeGet(STORAGE_KEYS.IN_KIND, INITIAL_IN_KIND),
+  getInKind: (): InKindContribution[] => safeGet<InKindContribution[]>(STORAGE_KEYS.IN_KIND, []),
   saveInKind: (ink: InKindContribution[]): void => safeSet(STORAGE_KEYS.IN_KIND, ink),
 
   // Journal d'audit et traçabilité
-  getAuditLogs: (): AuditLog[] => safeGet(STORAGE_KEYS.AUDIT_LOGS, [
-    {
-      id: 'log-01',
-      timestamp: '2026-01-01 09:00:00',
-      user: 'Mme Amina BENJELLOUN',
-      action: 'OUVERTURE_EXERCICE',
-      details: 'Ouverture de l\'exercice comptable 2026',
-      entityType: 'EXERCICE'
-    }
-  ]),
-  addAuditLog: (action: string, details: string, user = 'Utilisateur en cours'): void => {
+  getAuditLogs: (): AuditLog[] => safeGet<AuditLog[]>(STORAGE_KEYS.AUDIT_LOGS, []),
+  setActor: (name: string): void => { currentActor = name || 'Utilisateur en cours'; },
+  addAuditLog: (action: string, details: string, user = currentActor): void => {
     const logs = StorageService.getAuditLogs();
     const newLog: AuditLog = {
       id: `log-${Date.now()}`,
@@ -407,8 +380,8 @@ export const StorageService = {
   },
 
   // Google Apps Script Webhook URL
-  getGasWebhookUrl: (): string => localStorage.getItem(STORAGE_KEYS.GAS_WEBHOOK_URL) || '',
-  saveGasWebhookUrl: (url: string): void => localStorage.setItem(STORAGE_KEYS.GAS_WEBHOOK_URL, url),
+  getGasWebhookUrl: (): string => { try { return localStorage.getItem(STORAGE_KEYS.GAS_WEBHOOK_URL) || ''; } catch { return ''; } },
+  saveGasWebhookUrl: (url: string): void => { try { localStorage.setItem(STORAGE_KEYS.GAS_WEBHOOK_URL, url); } catch { /* ignore */ } },
 
   // Sauvegarde globale JSON exportable
   exportDatabaseJSON: (): string => {
@@ -457,6 +430,7 @@ export const StorageService = {
       if (data.volunteers) safeSet(STORAGE_KEYS.VOLUNTEERS, data.volunteers);
       if (data.inKind) safeSet(STORAGE_KEYS.IN_KIND, data.inKind);
       StorageService.addAuditLog('IMPORT_BASE', 'Restauration complète de la base de données depuis un fichier JSON');
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('aysm:storage-imported'));
       return true;
     } catch (e) {
       console.error('Erreur importation JSON', e);
@@ -464,23 +438,10 @@ export const StorageService = {
     }
   },
 
-  // Réinitialisation aux données démo
-  resetToDemoData: (): void => {
-    safeSet(STORAGE_KEYS.PROFILE, INITIAL_ASSOCIATION_PROFILE);
-    safeSet(STORAGE_KEYS.FISCAL_YEARS, INITIAL_FISCAL_YEARS);
-    safeSet(STORAGE_KEYS.ACCOUNTS, MOROCCAN_ASSOCIATION_ACCOUNTS);
-    safeSet(STORAGE_KEYS.ENTRIES, INITIAL_ENTRIES);
-    safeSet(STORAGE_KEYS.RECETTES, INITIAL_RECETTES);
-    safeSet(STORAGE_KEYS.DEPENSES, INITIAL_DEPENSES);
-    safeSet(STORAGE_KEYS.DISBURSEMENTS, INITIAL_DISBURSEMENTS);
-    safeSet(STORAGE_KEYS.BANK_ACCOUNTS, INITIAL_BANK_ACCOUNTS);
-    safeSet(STORAGE_KEYS.SUBVENTIONS, INITIAL_SUBVENTIONS);
-    safeSet(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS);
-    safeSet(STORAGE_KEYS.BUDGETS, INITIAL_BUDGET_ITEMS);
-    safeSet(STORAGE_KEYS.IMMOBILISATIONS, INITIAL_IMMOBILISATIONS);
-    safeSet(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
-    safeSet(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS);
-    safeSet(STORAGE_KEYS.VOLUNTEERS, INITIAL_VOLUNTEERS);
-    safeSet(STORAGE_KEYS.IN_KIND, INITIAL_IN_KIND);
+  // Alimente le cache mémoire depuis l'état cloud (App.tsx)
+  hydrate: (data: Partial<Record<keyof typeof STORAGE_KEYS, unknown>>): void => {
+    (Object.keys(data) as Array<keyof typeof STORAGE_KEYS>).forEach(k => {
+      if (data[k] !== undefined) memoryStore.set(STORAGE_KEYS[k], data[k]);
+    });
   }
 };

@@ -104,7 +104,9 @@ export const AssociationSettings: React.FC<AssociationSettingsProps> = ({
 
   const handleFileRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+    if (!window.confirm('Attention : la restauration remplace les données actuelles de l\'association (et sera enregistrée dans la base en ligne). Continuer ?')) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -112,8 +114,7 @@ export const AssociationSettings: React.FC<AssociationSettingsProps> = ({
         const content = event.target?.result as string;
         const ok = StorageService.importDatabaseJSON(content);
         if (ok) {
-          alert('Restauration complète de la base de données réussie ! L\'application va recharger les données.');
-          window.location.reload();
+          alert('Restauration réussie. Les données importées vont être enregistrées dans la base en ligne.');
         } else {
           alert('Le fichier sélectionné n\'est pas un export valide.');
         }

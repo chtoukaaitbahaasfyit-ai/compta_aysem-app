@@ -6,11 +6,13 @@
  * Interface inspirée de SAGE 100
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StorageService } from './services/storageService';
 import { AccountingEngine } from './services/accountingEngine';
-import { AuthService } from './services/authService';
-import { CloudDataService } from './services/cloudDataService';
+import { AuthService, SessionExpiredError } from './services/authService';
+import { CloudDataService, RevisionConflictError, RpcMissingError, type CloudModule } from './services/cloudDataService';
+import { INITIAL_ASSOCIATION_PROFILE } from './data/initialData';
+import { asArray, normalizeBankAccounts } from './utils/normalize';
 import { MOROCCAN_ASSOCIATION_ACCOUNTS } from './data/moroccanChartOfAccounts';
 import {
   AssociationProfile,
@@ -59,6 +61,16 @@ import { UserLoginModal } from './components/UserLoginModal';
 import { UserManagement } from './components/UserManagement';
 import { InviteAcceptance } from './components/InviteAcceptance';
 
+const BLANK_USER = { id: '', username: '', name: '', nameArabic: '', email: '', role: 'pending', roleArabic: 'غير مسجل' } as AppAuthUser;
+
+const DEFAULT_PROFILE: AssociationProfile = {
+  ...INITIAL_ASSOCIATION_PROFILE,
+  name: 'Association A.Y.S.M', arabicName: 'أكاديمية دعم ومواكبة الشباب', sigle: 'A.Y.S.M', address: '', city: 'Sidi Bibi', phone: '', email: 'Lahsencherkaoui2@gmail.com', website: '', ifFiscal: '', patente: '', cnss: '', ice: '', rib: '', bankName: '', agency: '', president: 'Lahsen Cherkaoui', treasurer: '', secretary: '', creationDate: '', receiptReceiptNumber: '', accountingModel: 'normal', activeFiscalYear: '2026', currency: 'MAD'
+};
+
+// Order matters only for readability; each module is saved independently with optimistic concurrency.
+const SAVE_ORDER: CloudModule[] = ['association_profile','fiscal_years','accounts','bank_accounts','entries','recettes','depenses','disbursements','projects','subventions','budgets','immobilisations','members','documents','volunteers','in_kind'];
+
 export default function App() {
   // Navigation & UI states
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -84,11 +96,19 @@ export default function App() {
   const [inKind, setInKind] = useState<InKindContribution[]>(() => StorageService.getInKind());
 
   // User Authentication & Roles (جمعية شباب الغد للتنمية والتعاون)
-  const [currentUser, setCurrentUser] = useState<AppAuthUser>(() => AuthService.getCurrentUser() || ({ id: '', username: '', name: '', nameArabic: '', email: '', role: 'pending', roleArabic: 'غير مسجل' } as AppAuthUser));
+  const [currentUser, setCurrentUser] = useState<AppAuthUser>(() => AuthService.getCurrentUser() || BLANK_USER);
   const [disbursements, setDisbursements] = useState<DisbursementOrder[]>(() => StorageService.getDisbursements());
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(!AuthService.getCurrentUser());
   const [cloudReady, setCloudReady] = useState(false);
   const [cloudError, setCloudError] = useState('');
+  const [cloudConflict, setCloudConflict] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const revisionsRef = useRef<Partial<Record<CloudModule, number>>>({});
+  const lastSavedRef = useRef<Partial<Record<CloudModule, string>>>({});
+  const latestPayloadRef = useRef<Partial<Record<CloudModule, unknown>>>({});
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const blockedRef = useRef(false);
+  const rpcMissingRef = useRef(false);
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
 
   useEffect(() => { const update = () => setIsOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
@@ -96,32 +116,63 @@ export default function App() {
   // Hydrate every accounting module from Supabase after authentication. Demo seed records are never uploaded.
   useEffect(() => { let alive = true; AuthService.restoreSession().then(user => { if (!alive) return; if (user) { setCurrentUser(user); if (user.role === 'tresorier') setActiveTab('disbursements'); else setActiveTab('dashboard'); setIsLoginModalOpen(false); } else setIsLoginModalOpen(true); }).catch(() => { if (alive) setIsLoginModalOpen(true); }); return () => { alive = false; }; }, []);
 
+  const handleSessionExpired = () => {
+    blockedRef.current = true;
+    AuthService.logout();
+    setCloudReady(false); setCloudError(''); setCurrentUser(BLANK_USER); setIsLoginModalOpen(true);
+  };
+
+  // Hydrate every accounting module from Supabase after authentication. Demo seed records are never used or uploaded.
   useEffect(() => {
     if (!currentUser.id || !['president', 'responsable_administratif'].includes(currentUser.role)) { setCloudReady(false); return; }
-    let alive = true; setCloudReady(false); setCloudError('');
-    setProfile({ ...profile, name: 'Association A.Y.S.M', arabicName: 'أكاديمية دعم ومواكبة الشباب', sigle: 'A.Y.S.M', address: '', city: 'Sidi Bibi', phone: '', email: 'Lahsencherkaoui2@gmail.com', website: '', ifFiscal: '', patente: '', cnss: '', ice: '', rib: '', bankName: '', agency: '', president: 'Lahsen Cherkaoui', treasurer: '', secretary: '', creationDate: '', receiptReceiptNumber: '', accountingModel: 'normal', activeFiscalYear: '2026', currency: 'MAD' });
+    let alive = true; setCloudReady(false); setCloudError(''); setCloudConflict(false); blockedRef.current = false;
+    setProfile(DEFAULT_PROFILE);
     setFiscalYears([]); setAccounts(MOROCCAN_ASSOCIATION_ACCOUNTS); setEntries([]); setRecettes([]); setDepenses([]); setDisbursements([]); setBankAccounts([]); setProjects([]); setSubventions([]); setBudgets([]); setImmobilisations([]); setMembers([]); setDocuments([]); setVolunteers([]); setInKind([]);
-    CloudDataService.loadAll().then(data => {
+    CloudDataService.loadAll().then(({ data, revisions }) => {
       if (!alive) return;
-      const emptyProfile: AssociationProfile = { ...profile, name: 'Association A.Y.S.M', arabicName: 'أكاديمية دعم ومواكبة الشباب', sigle: 'A.Y.S.M', address: '', city: 'Sidi Bibi', phone: '', email: 'Lahsencherkaoui2@gmail.com', website: '', ifFiscal: '', patente: '', cnss: '', ice: '', rib: '', bankName: '', agency: '', president: 'Lahsen Cherkaoui', treasurer: '', secretary: '', creationDate: '', receiptReceiptNumber: '', accountingModel: 'normal', activeFiscalYear: '2026', currency: 'MAD' };
-      setProfile((data.association_profile as AssociationProfile) || emptyProfile);
-      setFiscalYears((data.fiscal_years as FiscalYear[]) || []);
-      setAccounts((data.accounts as Account[]) || MOROCCAN_ASSOCIATION_ACCOUNTS);
-      setEntries((data.entries as AccountingEntry[]) || []);
-      setRecettes((data.recettes as Recette[]) || []);
-      setDepenses((data.depenses as Depense[]) || []);
-      setDisbursements((data.disbursements as DisbursementOrder[]) || []);
-      setBankAccounts((data.bank_accounts as BankAccount[]) || []);
-      setProjects((data.projects as Project[]) || []);
-      setSubventions((data.subventions as Subvention[]) || []);
-      setBudgets((data.budgets as BudgetItem[]) || []);
-      setImmobilisations((data.immobilisations as Immobilisation[]) || []);
-      setMembers((data.members as Member[]) || []);
-      setDocuments((data.documents as DocumentArchive[]) || []);
-      setVolunteers((data.volunteers as VolunteerWork[]) || []);
-      setInKind((data.in_kind as InKindContribution[]) || []);
+      const loaded: Partial<Record<CloudModule, unknown>> = {
+        association_profile: (data.association_profile && typeof data.association_profile === 'object') ? { ...DEFAULT_PROFILE, ...(data.association_profile as object) } : DEFAULT_PROFILE,
+        fiscal_years: asArray<FiscalYear>(data.fiscal_years),
+        accounts: asArray<Account>(data.accounts, MOROCCAN_ASSOCIATION_ACCOUNTS),
+        entries: asArray<AccountingEntry>(data.entries),
+        recettes: asArray<Recette>(data.recettes),
+        depenses: asArray<Depense>(data.depenses),
+        disbursements: asArray<DisbursementOrder>(data.disbursements),
+        bank_accounts: normalizeBankAccounts(data.bank_accounts),
+        projects: asArray<Project>(data.projects),
+        subventions: asArray<Subvention>(data.subventions),
+        budgets: asArray<BudgetItem>(data.budgets),
+        immobilisations: asArray<Immobilisation>(data.immobilisations),
+        members: asArray<Member>(data.members),
+        documents: asArray<DocumentArchive>(data.documents),
+        volunteers: asArray<VolunteerWork>(data.volunteers),
+        in_kind: asArray<InKindContribution>(data.in_kind)
+      };
+      revisionsRef.current = { ...revisions };
+      // Snapshot of exactly what the UI starts with: modules absent from the cloud are NOT uploaded until the user changes them.
+      lastSavedRef.current = Object.fromEntries(SAVE_ORDER.map(m => [m, JSON.stringify(loaded[m])]));
+      setProfile(loaded.association_profile as AssociationProfile);
+      setFiscalYears(loaded.fiscal_years as FiscalYear[]);
+      setAccounts(loaded.accounts as Account[]);
+      setEntries(loaded.entries as AccountingEntry[]);
+      setRecettes(loaded.recettes as Recette[]);
+      setDepenses(loaded.depenses as Depense[]);
+      setDisbursements(loaded.disbursements as DisbursementOrder[]);
+      setBankAccounts(loaded.bank_accounts as BankAccount[]);
+      setProjects(loaded.projects as Project[]);
+      setSubventions(loaded.subventions as Subvention[]);
+      setBudgets(loaded.budgets as BudgetItem[]);
+      setImmobilisations(loaded.immobilisations as Immobilisation[]);
+      setMembers(loaded.members as Member[]);
+      setDocuments(loaded.documents as DocumentArchive[]);
+      setVolunteers(loaded.volunteers as VolunteerWork[]);
+      setInKind(loaded.in_kind as InKindContribution[]);
       setCloudReady(true);
-    }).catch(error => { if (alive) setCloudError(error instanceof Error ? error.message : 'تعذر تحميل البيانات السحابية'); });
+    }).catch(error => {
+      if (!alive) return;
+      if (error instanceof SessionExpiredError) handleSessionExpired();
+      else setCloudError(error instanceof Error ? error.message : 'تعذر تحميل البيانات السحابية');
+    });
     return () => { alive = false; };
   }, [currentUser.id]);
 
@@ -132,18 +183,59 @@ export default function App() {
     return () => { alive = false; };
   }, [currentUser.id, currentUser.role]);
 
-  // Cloud is authoritative: every changed module is written to Supabase, never queued for offline sync.
+  // Keep the in-memory StorageService mirror identical to React state (used by disbursement execution, exports, audit).
   useEffect(() => {
-    // Only the president may load or persist the legacy all-modules accounting snapshot.
-    // Other roles must use narrowly-scoped workflow endpoints, never app_records.
+    StorageService.hydrate({ PROFILE: profile, FISCAL_YEARS: fiscalYears, ACCOUNTS: accounts, ENTRIES: entries, RECETTES: recettes, DEPENSES: depenses, DISBURSEMENTS: disbursements, BANK_ACCOUNTS: bankAccounts, SUBVENTIONS: subventions, PROJECTS: projects, BUDGETS: budgets, IMMOBILISATIONS: immobilisations, MEMBERS: members, DOCUMENTS: documents, VOLUNTEERS: volunteers, IN_KIND: inKind });
+  }, [profile, fiscalYears, accounts, entries, recettes, depenses, disbursements, bankAccounts, projects, subventions, budgets, immobilisations, members, documents, volunteers, inKind]);
+  useEffect(() => { StorageService.setActor(currentUser.name); }, [currentUser.name]);
+
+  latestPayloadRef.current = { association_profile: profile, fiscal_years: fiscalYears, accounts, entries, recettes, depenses, disbursements, bank_accounts: bankAccounts, projects, subventions, budgets, immobilisations, members, documents, volunteers, in_kind: inKind };
+
+  // Cloud is authoritative. Only modules that changed are written, one at a time, each guarded by its revision
+  // (optimistic locking): if another device saved first, we stop and ask for a reload instead of overwriting it.
+  const queueSave = () => {
+    saveQueueRef.current = saveQueueRef.current.then(async () => {
+      if (blockedRef.current) return;
+      const payload = latestPayloadRef.current;
+      try {
+        const changed = SAVE_ORDER
+          .map(module => ({ module, json: JSON.stringify(payload[module]) }))
+          .filter(({ module, json }) => json !== lastSavedRef.current[module]);
+        if (changed.length) {
+          let done = false;
+          if (!rpcMissingRef.current) {
+            try {
+              // Preferred path: one atomic transaction for every changed module.
+              const revs = await CloudDataService.saveModules(changed.map(({ module }) => ({ module, payload: payload[module], expectedRevision: revisionsRef.current[module] })));
+              changed.forEach(({ module, json }) => { revisionsRef.current[module] = Number(revs[module]) || (revisionsRef.current[module] ?? 0) + 1; lastSavedRef.current[module] = json; });
+              done = true;
+            } catch (e) {
+              if (!(e instanceof RpcMissingError)) throw e;
+              rpcMissingRef.current = true; // migration not applied yet → per-module fallback (not atomic)
+            }
+          }
+          if (!done) {
+            for (const { module, json } of changed) {
+              revisionsRef.current[module] = await CloudDataService.saveModule(module, payload[module], revisionsRef.current[module]);
+              lastSavedRef.current[module] = json;
+            }
+          }
+        }
+        setCloudError('');
+      } catch (error) {
+        if (error instanceof RevisionConflictError) { blockedRef.current = true; setCloudConflict(true); setCloudError(error.message); }
+        else if (error instanceof SessionExpiredError) handleSessionExpired();
+        else { setCloudError(error instanceof Error ? error.message : 'فشل حفظ البيانات في السحابة'); window.setTimeout(() => setRetryTick(t => t + 1), 5000); }
+      }
+    });
+  };
+
+  useEffect(() => {
+    // Only the president persists the legacy all-modules snapshot; other roles use scoped workflow endpoints.
     if (!cloudReady || !currentUser.id || currentUser.role !== 'president') return;
-    const payload = { association_profile: profile, fiscal_years: fiscalYears, accounts, entries, recettes, depenses, disbursements, bank_accounts: bankAccounts, projects, subventions, budgets, immobilisations, members, documents, volunteers, in_kind: inKind };
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      CloudDataService.saveAll(payload).then(() => { if (!cancelled) setCloudError(''); }).catch(error => { if (!cancelled) setCloudError(error instanceof Error ? error.message : 'فشل حفظ البيانات في السحابة'); });
-    }, 700);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [cloudReady, currentUser.id, profile, fiscalYears, accounts, entries, recettes, depenses, disbursements, bankAccounts, projects, subventions, budgets, immobilisations, members, documents, volunteers, inKind]);
+    const timer = window.setTimeout(queueSave, 700);
+    return () => window.clearTimeout(timer);
+  }, [cloudReady, currentUser.id, retryTick, profile, fiscalYears, accounts, entries, recettes, depenses, disbursements, bankAccounts, projects, subventions, budgets, immobilisations, members, documents, volunteers, inKind]);
 
   // Keyboard shortcut listener (e.g. F3 for new entry)
   useEffect(() => {
@@ -158,26 +250,27 @@ export default function App() {
   }, []);
 
   // Total cash available
-  const totalCash = bankAccounts.reduce((sum, b) => sum + b.currentBalance, 0);
+  const totalCash = bankAccounts.reduce((sum, b) => sum + (Number(b.currentBalance) || 0), 0);
 
   // Handlers
+  // Applies all bank/cash movements of an entry in ONE state update (the previous per-line loop used a stale
+  // `bankAccounts` and lost every movement but the last when an entry touched two accounts, e.g. a transfer).
+  const applyBankDeltas = (lines: AccountingEntry['lines'], sign: 1 | -1) => {
+    const deltas = new Map<string, number>();
+    lines.forEach(line => {
+      const bank = bankAccounts.find(b => b.accountNumber === line.accountNumber);
+      if (bank) deltas.set(bank.id, (deltas.get(bank.id) || 0) + sign * ((line.debit || 0) - (line.credit || 0)));
+    });
+    if (!deltas.size) return;
+    const updatedAccounts = bankAccounts.map(b => deltas.has(b.id) ? { ...b, currentBalance: (Number(b.currentBalance) || 0) + (deltas.get(b.id) as number) } : b);
+    setBankAccounts(updatedAccounts);
+    StorageService.saveBankAccounts(updatedAccounts);
+  };
+
   const handleSaveEntry = (newEntry: AccountingEntry) => {
     const updated = StorageService.addEntry(newEntry);
     setEntries(updated);
-
-    // Update bank balance if cash/bank affected
-    newEntry.lines.forEach(line => {
-      const bank = bankAccounts.find(b => b.accountNumber === line.accountNumber);
-      if (bank) {
-        const netChange = (line.debit || 0) - (line.credit || 0);
-        const updatedAccounts = bankAccounts.map(b =>
-          b.id === bank.id ? { ...b, currentBalance: b.currentBalance + netChange } : b
-        );
-        setBankAccounts(updatedAccounts);
-        StorageService.saveBankAccounts(updatedAccounts);
-      }
-    });
-
+    applyBankDeltas(newEntry.lines, 1);
     setActiveTab('entries-list');
   };
 
@@ -192,17 +285,7 @@ export default function App() {
     StorageService.addAuditLog('EXTOURNE', `Extourne comptable de la pièce ${originalEntry.pieceNumber}`);
 
     // Reverse bank balances if applicable
-    originalEntry.lines.forEach(line => {
-      const bank = bankAccounts.find(b => b.accountNumber === line.accountNumber);
-      if (bank) {
-        const reversedChange = (line.credit || 0) - (line.debit || 0);
-        const updatedAccounts = bankAccounts.map(b =>
-          b.id === bank.id ? { ...b, currentBalance: b.currentBalance + reversedChange } : b
-        );
-        setBankAccounts(updatedAccounts);
-        StorageService.saveBankAccounts(updatedAccounts);
-      }
-    });
+    applyBankDeltas(originalEntry.lines, -1);
 
     alert(`La pièce ${originalEntry.pieceNumber} a été contrepassée par l'écriture d'extourne ${extourneEntry.pieceNumber}. L'historique d'audit est intact.`);
   };
@@ -282,13 +365,30 @@ export default function App() {
   };
 
   const handleRefreshAllData = () => {
+    setProfile(StorageService.getProfile());
+    setFiscalYears(StorageService.getFiscalYears());
+    setAccounts(StorageService.getAccounts());
     setEntries(StorageService.getEntries());
-    setBankAccounts(StorageService.getBankAccounts());
+    setRecettes(StorageService.getRecettes());
+    setBankAccounts(normalizeBankAccounts(StorageService.getBankAccounts()));
     setProjects(StorageService.getProjects());
+    setSubventions(StorageService.getSubventions());
     setBudgets(StorageService.getBudgets());
+    setImmobilisations(StorageService.getImmobilisations());
+    setMembers(StorageService.getMembers());
+    setDocuments(StorageService.getDocuments());
+    setVolunteers(StorageService.getVolunteers());
+    setInKind(StorageService.getInKind());
     setDepenses(StorageService.getDepenses());
     setDisbursements(StorageService.getDisbursements());
   };
+
+  // A JSON restore fills the in-memory store; pull it into React state so it is then saved to the cloud.
+  useEffect(() => {
+    const onImported = () => handleRefreshAllData();
+    window.addEventListener('aysm:storage-imported', onImported);
+    return () => window.removeEventListener('aysm:storage-imported', onImported);
+  }, []);
 
   const handleResetAllData = () => {
     alert('استعادة البيانات التجريبية معطلة في النسخة السحابية لحماية بيانات الجمعية.');
@@ -312,7 +412,8 @@ export default function App() {
       }`}
     >
       {currentUser.id && !isOnline && <div className="fixed inset-0 z-[90] bg-slate-950/80 flex items-center justify-center p-6 text-center"><div className="max-w-md rounded-2xl bg-white p-6 shadow-xl"><div className="text-xl font-bold text-rose-700 mb-2">الاتصال بالإنترنت مقطوع</div><p className="text-sm text-slate-700">AYSM COMPTA يعمل عبر الإنترنت فقط. تم إيقاف التفاعل حتى يعود الاتصال. لا تدخل أي عملية محاسبية الآن.</p></div></div>}
-      {currentUser.id && (cloudError ? <div className="bg-rose-100 text-rose-800 text-sm p-3 text-center">{cloudError}</div> : currentUser.role === 'president' && !cloudReady ? <div className="bg-amber-100 text-amber-900 text-sm p-3 text-center">جار تحميل بيانات الجمعية من قاعدة البيانات...</div> : <div className="bg-emerald-50 text-emerald-800 text-xs p-2 text-center">متصل بقاعدة البيانات السحابية — الحفظ مباشر عبر الإنترنت</div>)}
+      {currentUser.id && ['president', 'responsable_administratif'].includes(currentUser.role) && !cloudReady && !cloudError && <div className="fixed inset-0 z-[80] cursor-wait" aria-hidden="true" />}
+      {currentUser.id && (cloudError ? <div className="bg-rose-100 text-rose-800 text-sm p-3 text-center">{cloudError}{cloudConflict && <button onClick={() => window.location.reload()} className="mx-3 px-3 py-1 rounded bg-rose-700 text-white font-semibold">إعادة التحميل</button>}</div> : ['president', 'responsable_administratif'].includes(currentUser.role) && !cloudReady ? <div className="bg-amber-100 text-amber-900 text-sm p-3 text-center">جار تحميل بيانات الجمعية من قاعدة البيانات...</div> : <div className="bg-emerald-50 text-emerald-800 text-xs p-2 text-center">متصل بقاعدة البيانات السحابية — الحفظ مباشر عبر الإنترنت</div>)}
       {/* Top Header */}
       <Header
         profile={profile}
@@ -449,8 +550,9 @@ export default function App() {
               entries={entries}
               fiscalYear={profile.activeFiscalYear}
               onUpdateBankAccounts={(accs) => {
-                setBankAccounts(accs);
-                StorageService.saveBankAccounts(accs);
+                const clean = normalizeBankAccounts(accs);
+                setBankAccounts(clean);
+                StorageService.saveBankAccounts(clean);
               }}
               onAddInternalTransfer={(entry) => {
                 const updated = StorageService.addEntry(entry);

@@ -4,6 +4,9 @@ import { assertSupabaseConfigured, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from
 
 type AuthSession = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number; user: { id: string; email?: string; user_metadata?: Record<string, unknown> } };
 export const SESSION_KEY = 'aysm_supabase_session_v1';
+export class SessionExpiredError extends Error {
+  constructor(message = 'انتهت جلسة الدخول. سجل الدخول من جديد.') { super(message); this.name = 'SessionExpiredError'; }
+}
 const ROLE_LABELS: Record<string, string> = {
   president: 'رئيس الجمعية (المدير)', tresorier: 'أمين المال', responsable_administratif: 'المسؤول الإداري', pending: 'في انتظار التفعيل'
 };
@@ -18,6 +21,27 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.msg || body.message || body.error_description || body.error || 'تعذر الاتصال بخدمة Supabase');
   return body as T;
+}
+
+let refreshInFlight: Promise<AuthSession> | null = null;
+/** Returns a session whose access token is valid for at least 60s, refreshing it once (shared) when needed. */
+export async function getValidSession(): Promise<AuthSession> {
+  const session = getSupabaseSession();
+  if (!session?.access_token || !session.user?.id) throw new SessionExpiredError();
+  if (!session.expires_at || session.expires_at > Date.now() / 1000 + 60) return session;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const refreshed = await request<AuthSession>('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: session.refresh_token }) });
+        const next = { ...refreshed, expires_at: refreshed.expires_at || Date.now() / 1000 + (refreshed.expires_in || 3600) };
+        saveSession(next);
+        return next;
+      } catch (error) {
+        throw new SessionExpiredError(error instanceof Error ? error.message : undefined);
+      } finally { refreshInFlight = null; }
+    })();
+  }
+  return refreshInFlight;
 }
 async function profileFor(session: AuthSession): Promise<AppAuthUser> {
   const rows = await request<Array<{ id: string; display_name: string; role: string; is_active: boolean }>>('/rest/v1/profiles?select=id,display_name,role,is_active&id=eq.' + encodeURIComponent(session.user.id), {}, session.access_token);
@@ -53,14 +77,16 @@ export const AuthService = {
     try { return JSON.parse(cached) as AppAuthUser; } catch { return null; }
   },
   async restoreSession(): Promise<AppAuthUser | null> {
-    let session = getSupabaseSession(); if (!session) return null;
     try {
-      if (session.expires_at && session.expires_at < Date.now()/1000 + 30) {
-        const refreshed = await request<AuthSession>('/auth/v1/token?grant_type=refresh_token', { method:'POST', body: JSON.stringify({ refresh_token: session.refresh_token }) });
-        session = { ...refreshed, expires_at: refreshed.expires_at || Date.now()/1000 + 3600 }; saveSession(session);
-      }
+      const session = await getValidSession();
       const user = await profileFor(session); sessionStorage.setItem('aysm_profile_cache', JSON.stringify(user)); return user;
-    } catch { saveSession(null); sessionStorage.removeItem('aysm_profile_cache'); return null; }
+    } catch (error) {
+      // Only drop the stored session when the server really rejected it; keep it on a transient network error.
+      if (error instanceof SessionExpiredError || (error instanceof Error && /JWT|expired|invalid|not allowed|غير مفعل/i.test(error.message))) {
+        saveSession(null); sessionStorage.removeItem('aysm_profile_cache');
+      }
+      return null;
+    }
   },
   async login(email: string, password: string): Promise<AppAuthUser> {
     const result = await request<AuthSession>('/auth/v1/token?grant_type=password', { method:'POST', body: JSON.stringify({ email: email.trim(), password }) });

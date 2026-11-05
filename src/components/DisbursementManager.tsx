@@ -1074,7 +1074,7 @@ export const DisbursementManager: React.FC<DisbursementManagerProps> = ({
                   >
                     {bankAccounts.map(b => (
                       <option key={b.id} value={b.id}>
-                        {b.name} - رصيد متاح: {AccountingEngine.formatMAD(b.currentBalance)}
+                        {b.name} - رصيد متاح: {AccountingEngine.formatMAD(Number(b.currentBalance) || 0)}
                       </option>
                     ))}
                   </select>

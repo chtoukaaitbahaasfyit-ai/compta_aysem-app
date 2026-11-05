@@ -58,10 +58,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const cpc = AccountingEngine.calculateCPC(entries);
   const totalBank = bankAccounts
     .filter(b => b.type === 'banque')
-    .reduce((sum, b) => sum + b.currentBalance, 0);
+    .reduce((sum, b) => sum + (Number(b.currentBalance) || 0), 0);
   const totalCash = bankAccounts
     .filter(b => b.type === 'caisse')
-    .reduce((sum, b) => sum + b.currentBalance, 0);
+    .reduce((sum, b) => sum + (Number(b.currentBalance) || 0), 0);
   const totalTreasury = totalBank + totalCash;
 
   const totalSubventionsGranted = subventions.reduce((s, sub) => s + sub.amountGranted, 0);
