@@ -54,9 +54,15 @@ grant execute on function public.aysm_save_modules(jsonb) to authenticated;
 -- The last active president can never be demoted, deactivated or deleted (prevents locking everyone out).
 create or replace function private.aysm_protect_last_president()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_removing boolean;
 begin
-  if old.role = 'president' and old.is_active
-     and (tg_op = 'DELETE' or new.role <> 'president' or new.is_active = false)
+  -- NEW is not assigned on DELETE, so it must not appear in the same expression.
+  if tg_op = 'DELETE' then
+    v_removing := true;
+  else
+    v_removing := (new.role <> 'president' or new.is_active = false);
+  end if;
+  if old.role = 'president' and old.is_active and v_removing
      and not exists (select 1 from public.profiles p where p.id <> old.id and p.role = 'president' and p.is_active) then
     raise exception 'cannot_remove_last_president';
   end if;
