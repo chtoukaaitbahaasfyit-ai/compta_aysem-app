@@ -88,6 +88,22 @@ export const DepensesManager: React.FC<DepensesManagerProps> = ({
     }
 
     const targetAccount = bankAccounts.find(b => b.id === bankAccountId) || bankAccounts[0];
+    if (!targetAccount) {
+      alert('Aucun compte bancaire ou caisse enregistré. Créez-en un dans Trésorerie avant de saisir une dépense.');
+      return;
+    }
+    const availableBalance = Number(targetAccount.currentBalance) || 0;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Le montant doit être supérieur à zéro.');
+      return;
+    }
+    if (amount > availableBalance) {
+      if (paymentMethod === 'especes' || targetAccount.type === 'caisse') {
+        alert(`Solde de caisse insuffisant : ${availableBalance.toLocaleString()} DH disponibles pour un règlement de ${amount.toLocaleString()} DH. Alimentez la caisse (virement interne) avant de saisir cette dépense.`);
+        return;
+      }
+      if (!window.confirm(`Le solde du compte « ${targetAccount.name} » (${availableBalance.toLocaleString()} DH) est inférieur au montant (${amount.toLocaleString()} DH). Cela créerait un découvert. Continuer ?`)) return;
+    }
     const accountCharge = getDefaultAccountForCategory(category);
     const pieceNum = `DEP-${fiscalYear}-${Math.floor(1000 + Math.random() * 9000)}`;
     const voucherNum = `VOUCH-${fiscalYear}-${String(depenses.length + 1).padStart(4, '0')}`;

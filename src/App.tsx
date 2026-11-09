@@ -318,6 +318,12 @@ export default function App() {
   };
 
   const handleAddDepense = (newDepense: Depense, generatedEntry?: AccountingEntry) => {
+    // Defence in depth: a cash register can never go negative (the form also checks this).
+    const payingAccount = bankAccounts.find(b => b.id === newDepense.bankAccountId);
+    if (generatedEntry && payingAccount?.type === 'caisse' && (Number(payingAccount.currentBalance) || 0) < newDepense.amount) {
+      alert(`Solde de caisse insuffisant : ${(Number(payingAccount.currentBalance) || 0).toLocaleString()} DH disponibles pour un règlement de ${newDepense.amount.toLocaleString()} DH.`);
+      return;
+    }
     const updatedDepenses = [newDepense, ...depenses];
     setDepenses(updatedDepenses);
     StorageService.saveDepenses(updatedDepenses);
@@ -549,6 +555,7 @@ export default function App() {
               bankAccounts={bankAccounts}
               entries={entries}
               fiscalYear={profile.activeFiscalYear}
+              accounts={accounts}
               onUpdateBankAccounts={(accs) => {
                 const clean = normalizeBankAccounts(accs);
                 setBankAccounts(clean);

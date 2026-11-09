@@ -20,6 +20,7 @@ import {
 
 import { BankAccount, AccountingEntry } from '../types/accounting';
 import { AccountingEngine } from '../services/accountingEngine';
+import type { Account } from '../types/accounting';
 
 // Safe numeric balance (legacy/partial cloud records may lack the field) and cent-exact rounding.
 const bal = (a?: Pick<BankAccount, 'currentBalance'> | null): number => {
@@ -32,6 +33,8 @@ interface TreasuryManagerProps {
   bankAccounts: BankAccount[];
   entries: AccountingEntry[];
   fiscalYear: string;
+  /** Chart of accounts: a bank/cash account must point to an existing treasury account (514xxx bank, 516xxx cash). */
+  accounts?: Account[];
   onUpdateBankAccounts: (accounts: BankAccount[]) => void;
   onAddInternalTransfer: (entry: AccountingEntry) => void;
 }
@@ -40,6 +43,7 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
   bankAccounts,
   entries,
   fiscalYear,
+  accounts = [],
   onUpdateBankAccounts,
   onAddInternalTransfer
 }) => {
@@ -96,6 +100,20 @@ export const TreasuryManager: React.FC<TreasuryManagerProps> = ({
     if (!accountName || !accountNumber) {
       alert('Veuillez remplir le nom et le numéro comptable.');
       return;
+    }
+
+    // The account number is posted on every journal line: it must exist in the chart and be a treasury account.
+    if (accounts.length > 0) {
+      const prefix = newAccountType === 'banque' ? '514' : '516';
+      const chartAccount = accounts.find(a => a.number === accountNumber);
+      if (!chartAccount) {
+        alert(`Le numéro ${accountNumber} n'existe pas dans le plan comptable. Créez-le d'abord ou choisissez un compte ${prefix}xxx existant.`);
+        return;
+      }
+      if (!accountNumber.startsWith(prefix)) {
+        alert(`Un compte ${newAccountType === 'banque' ? 'bancaire' : 'de caisse'} doit utiliser un numéro ${prefix}xxx (trésorerie).`);
+        return;
+      }
     }
 
     if (bankAccounts.some(b => b.accountNumber === accountNumber)) {
